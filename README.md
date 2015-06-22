@@ -1,3 +1,3 @@
-# PythonScripts
-Python scripts used for data analysis
+# Deep Sequencing Data Analysis
+Software used for data analysis
 
