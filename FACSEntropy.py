@@ -1,0 +1,325 @@
+#!/usr/bin/python
+
+#Copyright (c) 2015, Justin R. Klesmith
+#All rights reserved.
+#FACSEntropy: Calculate FACS Entropy
+
+from __future__ import division
+from subprocess import check_output
+from math import log, pow
+import StringIO
+import argparse
+import time
+import os
+
+#Set the author information
+__author__ = "Justin R. Klesmith"
+__copyright__ = "Copyright 2015, Justin R. Klesmith"
+__credits__ = ["Justin R. Klesmith", "Caitlin A. Kowalsky", "Timothy A. Whitehead"]
+__license__ = "BSD-3"
+__version__ = "1.3, Build: 20150819"
+__maintainer__ = "Justin R. Klesmith"
+__email__ = ["klesmit3@msu.edu", "justinklesmith@gmail.com", "justinklesmith@evodyn.com"]
+
+#Get commandline arguments
+parser = argparse.ArgumentParser(description='FACS Shannon Entropy '+__version__)
+parser.add_argument('-s', dest='startresidue', action='store', required=True, help='What is the start residue? ie: 0, 40, 80')
+parser.add_argument('-l', dest='length', action='store', required=True, help='Length of your tile? ie: 40, 80')
+parser.add_argument('-d', dest='stddev', action='store', help='Standard Deviation? (FACS) ie: 0.6')
+parser.add_argument('-c', dest='percentcollected', action='store', help='Percent Collected? (FACS) ie: 0.05')
+parser.add_argument('-t', dest='sigthreshold', action='store', nargs='?', const=1, default=5, help='Unselected counts for significance. Default = 5')
+parser.add_argument('-p', dest='path', action='store', required=True, help='What is the path to the enrich output directory? ie: ./tile/data/output/')
+parser.add_argument('-w', dest='wildtype', action='store', nargs='?', const=1, default='./WTSeq', help='File with the wild-type amino acid sequence. Default = ./WTSeq')
+parser.add_argument('-y', dest='ewtenrichment', action='store', help='Manual Ewt enrichment value')
+parser.add_argument('-z', dest='eiscalar', action='store', help='Manual Ei enrichment scalar')
+args = parser.parse_args()
+
+#Verify inputs 
+if args.stddev == None:
+    print "Missing SD. Flag: -d"
+    quit()
+
+if args.percentcollected == None:
+    print "Missing percent collected. Flag: -c"
+    quit()
+    
+if args.startresidue == None:
+    print "Missing start residue. Flag: -s"
+    quit()
+
+if args.length == None:
+    print "Missing tile length. Flag: -l"
+    quit()
+    
+if args.ewtenrichment and args.eiscalar != None:
+    #This section is only true if we want to provide our own WT enrichment and a scalar to add to Ei
+    OverrideEwtEi = True
+    ManualEwt = float(args.ewtenrichment)
+    EiScalar = float(args.eiscalar)
+else:
+    OverrideEwtEi = False
+
+#Global Variables
+if os.path.isfile(args.wildtype):
+    with open(args.wildtype, 'r') as infile: #Open the file with the wild-type protein sequence
+        WTSeq = infile.readline() #Read the first line of the WT sequence file
+else:
+    print "Wild-type sequence file not found...exit"
+    quit()
+  
+StartResidue = int(args.startresidue) #Starting residue for your tile
+TileLen = int(args.length) #Length of your tile
+Path = args.path #What is the path to the output directory
+SignificantThreshold = int(args.sigthreshold) #Number of counts in the unselected library and selected library to be significant
+AA_Table = 'ACDEFGHIKLMNPQRSTVWY'
+Mutations = {} #Mutations matrix
+Ewt = None #Initialize the variable for the wildtype enrichment
+SD = float(args.stddev) #Standard Deviation
+PC = float(args.percentcollected) #Percent collected
+THEOENRICHMENT = -log(PC, 2) #Theoretical maximum enrichment 
+    
+def Build_Matrix():
+    #Populate mutation array with None data
+    for j in xrange(0,TileLen):
+        for i in enumerate(AA_Table):
+            try:
+                #Mutations[ResID][MutID[1]][0 = RawLog2, 1 = Unused, 2 = UnselectedCounts, 3 = SelectedCounts, 4=p-value, 5=WT]
+                Mutations[j][i[1]] = [None, None, None, None, None, False]
+            except KeyError:
+                Mutations[j] = {}
+                Mutations[j][i[1]] = [None, None, None, None, None, False]
+
+    return Mutations
+
+def Get_WT_Ewt():
+    global Ewt
+    #Extract NA-NA WT Ewt log2
+    
+    awk = ""
+    if os.path.isfile(Path+'ratios_sel_example_F_N_include_filtered_B_PRO_qc_unsel_example_F_N_include_filtered_B_PRO_qc'):
+        awk = check_output(["awk", '{ print $5,$6,$8 }', Path+'ratios_sel_example_F_N_include_filtered_B_PRO_qc_unsel_example_F_N_include_filtered_B_PRO_qc'])
+    elif os.path.isfile(Path+'ratios_sel_example_F_N_include_filtered_R1_PRO_qc_unsel_example_F_N_include_filtered_R1_PRO_qc'):
+        awk = check_output(["awk", '{ print $5,$6,$8 }', Path+'ratios_sel_example_F_N_include_filtered_R1_PRO_qc_unsel_example_F_N_include_filtered_R1_PRO_qc'])
+    else:
+        print "Selected protein ratios file not found...exit"
+        quit()
+    
+    #Loop through the output
+    for line in StringIO.StringIO(awk):
+        split = line.split(" ")
+        location = str(split[0])
+        identity = str(split[1])
+        if location == "NA" and identity == "NA":
+            Ewt = float(split[2].rstrip('\n'))
+            print "Wild-type log2 (Ewt): "+str(Ewt)
+
+    return Ewt
+    
+def Get_Mut_Ei():
+    #Extract Mut Ei log2
+    
+    awk = ""
+    if os.path.isfile(Path+'ratios_sel_example_F_N_include_filtered_B_PRO_qc_unsel_example_F_N_include_filtered_B_PRO_qc.m1'):
+        awk = check_output(["awk", 'FNR>1{ print $5,$6,$8 }', Path+'ratios_sel_example_F_N_include_filtered_B_PRO_qc_unsel_example_F_N_include_filtered_B_PRO_qc.m1'])
+    elif os.path.isfile(Path+'ratios_sel_example_F_N_include_filtered_R1_PRO_qc_unsel_example_F_N_include_filtered_R1_PRO_qc.m1'):
+        awk = check_output(["awk", 'FNR>1{ print $5,$6,$8 }', Path+'ratios_sel_example_F_N_include_filtered_R1_PRO_qc_unsel_example_F_N_include_filtered_R1_PRO_qc.m1'])
+    else:
+        print "Selected protein ratios .m1 file not found...exit"
+        quit()
+    
+    #Loop through the output
+    for line in StringIO.StringIO(awk):
+        split = line.split(" ")
+        location = int(split[0])
+        identity = str(split[1])
+        
+        #Skip stop codons
+        if identity == "*":
+            continue
+
+        #Check to see if we're above the tile length and go to next
+        if location >= TileLen:
+            continue
+
+        Ei = float(split[2].rstrip('\n'))
+        
+        #Check to see if the enrichment is greater or equal than the theoretical
+        if OverrideEwtEi == False: #Apply no scalar to the Ei
+            if Ei >= THEOENRICHMENT:
+                Mutations[location][identity][0] = (THEOENRICHMENT - 0.001)
+            else:
+                Mutations[location][identity][0] = Ei
+        elif OverrideEwtEi == True: #Apply a scalar to the Ei
+            if Ei >= (THEOENRICHMENT + EiScalar):
+                Mutations[location][identity][0] = ((THEOENRICHMENT + EiScalar) - 0.001)
+            else:
+                Mutations[location][identity][0] = (Ei + EiScalar)
+
+    return Mutations
+
+def Get_Unsel_Counts():
+	#Get the unselected counts for a variant
+    
+    awk = ""
+    if os.path.isfile(Path+'counts_unsel_example_F_N_include_filtered_B_PRO_qc.m1'):
+        awk = check_output(["awk", 'FNR>1{ print $5,$6,$9 }', Path+'counts_unsel_example_F_N_include_filtered_B_PRO_qc.m1'])
+    elif os.path.isfile(Path+'counts_unsel_example_F_N_include_filtered_R1_PRO_qc.m1'):
+        awk = check_output(["awk", 'FNR>1{ print $5,$6,$9 }', Path+'counts_unsel_example_F_N_include_filtered_R1_PRO_qc.m1'])
+    else:
+        print "Unselected protein counts .m1 file not found...exit"
+        quit()
+        
+    #Loop through the output
+    for line in StringIO.StringIO(awk):
+        split = line.split(" ")
+        location = int(split[0])
+        identity = str(split[1])
+        
+        #Skip stop codons
+        if identity == "*":
+            continue
+
+        #Check to see if we're above the tile length and go to next
+        if location >= TileLen:
+            continue
+
+        counts = int(split[2].rstrip('\n'))
+        Mutations[location][identity][2] = counts #Set the unselected counts
+	
+    return Mutations
+
+def AssignWT():
+    #Assign the WT residues
+
+    for j in xrange(0,TileLen):
+        for i in enumerate(AA_Table):
+            if i[1] == WTSeq[StartResidue+j]:
+                Mutations[j][i[1]][5] = True
+
+    return Mutations
+
+def NumMutinCol(ID):
+    #Returns the number of sig mutants at a residue location
+    
+    #Initialize our variable
+    NUMSIGMUTS = 1 #Start at one to account for WT
+    
+    #Loop through the mut types
+    for i in enumerate(AA_Table):
+        if Mutations[ID][i[1]][2] >= SignificantThreshold:
+            NUMSIGMUTS = NUMSIGMUTS + 1
+    
+    return NUMSIGMUTS
+    
+def Shannon():
+
+    #Check to see if the wild-type enrichment is set
+    if Ewt == None:
+        print "Error: Wild-Type enrichment is not set...quit"
+        quit()
+
+    print ""
+    print "Shannon Entropy"
+    print "Residue Number,Shannon Entropy,Number of Mutations Counted+WT"
+    
+    #Check to see if the wild-type enrichment is set
+    if Ewt == None:
+        print "Error: Wild-Type enrichment is not set...quit"
+        quit()
+
+    #Check for a case where a significant variant fell out of the population
+    for j in xrange(0,TileLen):
+        for i in enumerate(AA_Table):
+            if Mutations[j][i[1]][0] == None and Mutations[j][i[1]][2] >= SignificantThreshold and Mutations[j][i[1]][3] == None:
+                Mutations[j][i[1]][0] = log((1/Mutations[j][i[1]][2]), 2) #Calculate the raw log2 for this variant and report it as less than this value
+
+    #Calculate p-values
+    for j in xrange(0,TileLen):
+
+        #First calculate the column sum
+        pcol = 0
+        for i in enumerate(AA_Table):
+            if Mutations[j][i[1]][5] == False: #Check to see if it's Wild-Type
+                if Mutations[j][i[1]][2] >= SignificantThreshold: #Check to see if the count is above the counting threshold
+                    pcol = pcol + pow(2, float(Mutations[j][i[1]][0]))
+            else:
+                pcol = pcol + pow(2, float(Ewt))
+        
+        #Then calculate the individual p-value and store the shannon entropy
+        for i in enumerate(AA_Table):
+            if Mutations[j][i[1]][5] == False: #Check to see if it's Wild-Type
+                if Mutations[j][i[1]][2] >= SignificantThreshold: #Check to see if the count is above the counting threshold
+                    Mutations[j][i[1]][4] = (pow(2, float(Mutations[j][i[1]][0]))/pcol)
+            else:
+                Mutations[j][i[1]][4] = (pow(2, float(Ewt))/pcol)
+                
+    #Calculate the residue shannon entropy
+    for j in xrange(0,TileLen):
+        SE = 0
+        for i in enumerate(AA_Table):
+            if Mutations[j][i[1]][2] >= SignificantThreshold: #Check to see if the count is above the counting threshold
+                SE = SE + -1*Mutations[j][i[1]][4]*log(Mutations[j][i[1]][4])
+        
+        #Normalize our Shannon Entropy
+        try:
+            SE = (SE*log(20))/log(NumMutinCol(j))
+        except ZeroDivisionError:
+            print "Your tile length is possibly too long or there is no mutations besides WT at position "+str(j)
+        
+        #Output the entropy values
+        print str(StartResidue+j)+","+str(SE)+","+str(NumMutinCol(j))
+
+    return
+    
+def main():
+    global Ewt
+    
+    #Write out preamble
+    print "FACS Shannon Entropy"
+    print "Author: "+__author__
+    print "Contact: "+__email__[0]+", "+__email__[1]+", "+__email__[2]
+    print __copyright__
+    print "Version: "+__version__
+    print "License: "+__license__
+    print "Credits: "+__credits__[0]+", "+__credits__[1]+", "+__credits__[2]
+    print ""
+    print "Cite:"
+    print "Github [user: JKlesmith] (www.github.com)"
+    print ""
+    print "Run parameters:"
+    print time.strftime("%H:%M:%S")
+    print time.strftime("%m/%d/%Y")
+    print "SD (-d): "+args.stddev
+    print "Percent Collected (-c): "+args.percentcollected
+    print "Theoretical max enrichment based off of percent collected: "+str(THEOENRICHMENT)
+    print "Start residue (-s): "+str(StartResidue)
+    print "Tile length (-l): "+str(TileLen)
+    print "Significant count threshold (-t): "+str(SignificantThreshold)
+    print "Wild-type sequence file (-w): "+args.wildtype
+    print "Enrich output directory (-p): "+Path
+
+    #Make the internal matrix
+    Build_Matrix()
+    
+    #Assign the WT residues
+    AssignWT()
+    
+    #Get the counts
+    Get_Unsel_Counts()
+    
+    #Get the log2 data
+    if OverrideEwtEi == True:
+        #Set the manual Ewt enrichment
+        Ewt = ManualEwt
+        print "Manually set Ewt (-y): "+str(Ewt)
+        print "Ei scalar transform (-z): "+str(EiScalar)
+    else:
+        Get_WT_Ewt()
+
+    Get_Mut_Ei()
+    
+    #Print out a csv
+    Shannon()
+
+if __name__ == '__main__':
+    main()
