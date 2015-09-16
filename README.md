@@ -2,8 +2,6 @@
 Software used for data analysis
 
 # Script: QuickNormalize.py
-Author: JRK
-
 This script normalizes a growth selection or a FACS screen.
 
 Command line:
@@ -34,7 +32,6 @@ Notes:
 It is highly recommended to direct the output to a file using > [file name] such that there is a saved copy of the normalization output. The output includes column and csv heatmap data used by other scripts for further analyses (stats, replicate errors). The output heatmap csv will be named heatmap_startresi_#.csv with # being the number given for the start residue. The wild-type amino acid sequence file is a single line ASCII file with the wild-type amino acid sequence. This file must be stripped of special characters hidden with rich-text editors. GNU nano can be used to edit this file and strip special hidden characters.
 
 # Script: FACSEntropy.py
-Author: JRK
 This script calculates the Shannon Entropy for a FACS screen.
 
 Command line:
@@ -59,7 +56,6 @@ Notes:
 Normalization of the dataset is not needed to run this script. It is highly recommended to direct the output to a file using > [file name] such that there is a saved copy of the entropy output. The script outputs residue number and entropy values. The wild-type amino acid sequence file is a single line ASCII file with the wild-type amino acid sequence. This file must be stripped of special characters hidden with rich-text editors. GNU nano can be used to edit this file and strip special hidden characters.
 
 # Script: QuickStats.py
-Author: JRK
 This script calculates the reportable statistics for a deep sequencing run.
 
 Command line:
