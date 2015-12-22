@@ -386,7 +386,7 @@ def main():
     print "Please cite:"
     print "Github [user: JKlesmith] (www.github.com)"
     print "Kowalsky CA, Klesmith JR, Stapleton JA, Kelly V, Reichkitzer N, Whitehead TA. 2015. High-Resolution Sequence-Function Mapping of Full-Length Proteins. PLoS ONE 10(3):e0118193. doi:10.1371/journal.pone.0118193."
-    print "Klesmith JR, Bacik J-P, Michalczyk R, Whitehead TA. 2015. Comprehensive sequence-flux mapping of metabolic pathways in living cells."
+    print "Klesmith JR, Bacik J-P, Michalczyk R, Whitehead TA. 2015. Comprehensive Sequence-Flux Mapping of a Levoglucosan Utilization Pathway in E. coli."
     print ""
     print "Normalization run parameters:"
     print time.strftime("%H:%M:%S")
