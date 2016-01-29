@@ -153,7 +153,12 @@ def Build_Mut_Arrays():
         WTCodon_Table[j] = WTSeq[j*3:(j*3)+3] #Set the WT codons
         
         #For each codon j set the amino acid
-        WTAmino_Table[j] = Translation_Table[WTCodon_Table[j]]
+        try:
+            WTAmino_Table[j] = Translation_Table[WTCodon_Table[j]]
+        except KeyError:
+            print "Error: Your tile length is probably set too high or the last codon is not three bases."
+            exit(1)
+            
     return Mutations, WTCodon_Table, WTAmino_Table
 
 def Get_WT_Ewt():
@@ -188,7 +193,7 @@ def Get_Mut_Ei():
     #Check for single base mutations
     for line in StringIO.StringIO(M1):
         split = line.split(" ")
-        if int(split[1]) >= StartResidue and int(split[1]) <= TranslateEnd: #Check to see that the base is in our tile
+        if int(split[1]) >= StartResidue and int(split[1]) < TranslateEnd: #Check to see that the base is in our tile
             codonnum = int((int(split[1]) - int(StartResidue))/3) #Specific Codon Number
             codon = split[0][StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
             Ei = float(split[3].rstrip('\n'))
@@ -215,8 +220,8 @@ def Get_Mut_Ei():
         split2 = line.split(" ")
         location = split2[1].split(",") #Get the individual mutation locations
         
-        if int(location[0]) >= StartResidue and int(location[0]) <= TranslateEnd: #Check to see that the base is in our tile
-            if int(location[1]) >= StartResidue and int(location[1]) <= TranslateEnd: #Check to see that the base is in our tile
+        if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
+            if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
                 codonnum1 = int((int(location[0]) - int(StartResidue))/3)
                 codonnum2 = int((int(location[1]) - int(StartResidue))/3)
                 if codonnum1 == codonnum2:
@@ -247,9 +252,9 @@ def Get_Mut_Ei():
         if split3[1] == "3": #Test to see that there are three mutations
             location = split3[2].split(",") #Get the individual mutation locations
             
-            if int(location[0]) >= StartResidue and int(location[0]) <= TranslateEnd: #Check to see that the base is in our tile
-                if int(location[1]) >= StartResidue and int(location[1]) <= TranslateEnd: #Check to see that the base is in our tile
-                    if int(location[2]) >= StartResidue and int(location[2]) <= TranslateEnd: #Check to see that the base is in our tile
+            if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
+                if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
+                    if int(location[2]) >= StartResidue and int(location[2]) < TranslateEnd: #Check to see that the base is in our tile
                         codonnum1 = int((int(location[0]) - int(StartResidue))/3)
                         codonnum2 = int((int(location[1]) - int(StartResidue))/3)
                         codonnum3 = int((int(location[2]) - int(StartResidue))/3)
@@ -289,10 +294,12 @@ def Get_Unsel_Counts():
     #Check for single base mutations
     for line in StringIO.StringIO(M1):
         split = line.split(" ")
-        if int(split[1]) >= StartResidue and int(split[1]) <= TranslateEnd: #Check to see that the base is in our tile
+        if int(split[1]) >= StartResidue and int(split[1]) < TranslateEnd: #Check to see that the base is in our tile
             codonnum = int((int(split[1]) - int(StartResidue))/3) #Specific Codon Number
             codon = split[0][StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
             counts = int(split[3].rstrip('\n'))
+            print str(codonnum)+codon+str(counts)
+            
             Mutations[codonnum][codon][2] = counts #Set the unselected counts
             Mutations[codonnum][codon][4] = split[0][StartResidue:TranslateEnd] #Set the sequence
  
@@ -301,8 +308,8 @@ def Get_Unsel_Counts():
         split2 = line.split(" ")
         location = split2[1].split(",") #Get the individual mutation locations
         
-        if int(location[0]) >= StartResidue and int(location[0]) <= TranslateEnd: #Check to see that the base is in our tile
-            if int(location[1]) >= StartResidue and int(location[1]) <= TranslateEnd: #Check to see that the base is in our tile
+        if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
+            if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
                 codonnum1 = int((int(location[0]) - int(StartResidue))/3)
                 codonnum2 = int((int(location[1]) - int(StartResidue))/3)
                 if codonnum1 == codonnum2:
@@ -318,9 +325,9 @@ def Get_Unsel_Counts():
         if split3[1] == "3": #Test to see that there are three mutations
             location = split3[2].split(",") #Get the individual mutation locations
             
-            if int(location[0]) >= StartResidue and int(location[0]) <= TranslateEnd: #Check to see that the base is in our tile
-                if int(location[1]) >= StartResidue and int(location[1]) <= TranslateEnd: #Check to see that the base is in our tile
-                    if int(location[2]) >= StartResidue and int(location[2]) <= TranslateEnd: #Check to see that the base is in our tile
+            if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
+                if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
+                    if int(location[2]) >= StartResidue and int(location[2]) < TranslateEnd: #Check to see that the base is in our tile
                         codonnum1 = int((int(location[0]) - int(StartResidue))/3)
                         codonnum2 = int((int(location[1]) - int(StartResidue))/3)
                         codonnum3 = int((int(location[2]) - int(StartResidue))/3)
@@ -346,7 +353,7 @@ def Get_Sel_Counts():
     #Check for single base mutations
     for line in StringIO.StringIO(M1):
         split = line.split(" ")
-        if int(split[1]) >= StartResidue and int(split[1]) <= TranslateEnd: #Check to see that the base is in our tile
+        if int(split[1]) >= StartResidue and int(split[1]) < TranslateEnd: #Check to see that the base is in our tile
             codonnum = int((int(split[1]) - int(StartResidue))/3) #Specific Codon Number
             codon = split[0][StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
             counts = int(split[3].rstrip('\n'))
@@ -357,8 +364,8 @@ def Get_Sel_Counts():
         split2 = line.split(" ")
         location = split2[1].split(",") #Get the individual mutation locations
         
-        if int(location[0]) >= StartResidue and int(location[0]) <= TranslateEnd: #Check to see that the base is in our tile
-            if int(location[1]) >= StartResidue and int(location[1]) <= TranslateEnd: #Check to see that the base is in our tile
+        if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
+            if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
                 codonnum1 = int((int(location[0]) - int(StartResidue))/3)
                 codonnum2 = int((int(location[1]) - int(StartResidue))/3)
                 if codonnum1 == codonnum2:
@@ -373,9 +380,9 @@ def Get_Sel_Counts():
         if split3[1] == "3": #Test to see that there are three mutations
             location = split3[2].split(",") #Get the individual mutation locations
             
-            if int(location[0]) >= StartResidue and int(location[0]) <= TranslateEnd: #Check to see that the base is in our tile
-                if int(location[1]) >= StartResidue and int(location[1]) <= TranslateEnd: #Check to see that the base is in our tile
-                    if int(location[2]) >= StartResidue and int(location[2]) <= TranslateEnd: #Check to see that the base is in our tile
+            if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
+                if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
+                    if int(location[2]) >= StartResidue and int(location[2]) < TranslateEnd: #Check to see that the base is in our tile
                         codonnum1 = int((int(location[0]) - int(StartResidue))/3)
                         codonnum2 = int((int(location[1]) - int(StartResidue))/3)
                         codonnum3 = int((int(location[2]) - int(StartResidue))/3)
@@ -501,7 +508,7 @@ def main():
     print "Normalization run parameters:"
     print time.strftime("%H:%M:%S")
     print time.strftime("%m/%d/%Y")
-    print "Start residue: "+args.startresidue
+    print "Translate Start: "+args.startresidue
     print "Normalization type: "+args.normtype
     if args.normtype == "growth":
         print "Doublings: "+args.gp
