@@ -161,125 +161,97 @@ def Build_Mut_Arrays():
             
     return Mutations, WTCodon_Table, WTAmino_Table
 
-def Get_WT_Ewt():
-    global Ewt
-    global WTSeq
-    
-    awk = ""
-    awk = check_output(["awk", '{ print $2,$5,$6,$8 }', Path+'ratios_sel_example_F_N_include_filtered_B_DNA_qc_unsel_example_F_N_include_filtered_B_DNA_qc'])
-    
-    #Loop through the output
-    for line in StringIO.StringIO(awk):
-        split = line.split(" ")
-        location = str(split[1])
-        identity = str(split[2])
-        if location == "NA" and identity == "NA":
-            WTSeq = split[0][StartResidue:TranslateEnd] #Set the wild-type sequence that is being translated
-            Ewt = float(split[3].rstrip('\n')) #Set the wild-type sequence enrichment
-            print "Wild-type log2 (Ewt): "+str(Ewt) #Print out the wild-type enrichment
+def Set_Enrichment(codonnum, codon, Ei):
+    global Mutations
+
+    #For FACS set a upper limit on enrichment, don't do anything for growth
+    if args.normtype == "FACS":
+        #Check to see if the enrichment is greater or equal than the theoretical
+        if OverrideEwtEi == False: #Apply no scalar to the Ei
+            if Ei >= THEOENRICHMENT:
+                Mutations[codonnum][codon][0] = (THEOENRICHMENT - 0.001)
+            else:
+                Mutations[codonnum][codon][0] = Ei
+        elif OverrideEwtEi == True: #Apply a scalar to the Ei
+            if Ei >= (THEOENRICHMENT + EiScalar):
+                Mutations[codonnum][codon][0] = ((THEOENRICHMENT + EiScalar) - 0.001)
+            else:
+                Mutations[codonnum][codon][0] = (Ei + EiScalar)
+        
+    elif args.normtype == "growth":
+        Mutations[codonnum][codon][0] = Ei
 
     return
 
-def Get_Mut_Ei():
-    #Extract Mut Ei log2
-    
-    ALL = ""
-    M1 = ""
-    M2 = ""
-    ALL = check_output(["awk", 'FNR>1{ print $2,$4,$5,$6,$8 }', args.path+'ratios_sel_example_F_N_include_filtered_B_DNA_qc_unsel_example_F_N_include_filtered_B_DNA_qc'])
-    M1 = check_output(["awk", 'FNR>1{ print $2,$5,$6,$8 }', args.path+'ratios_sel_example_F_N_include_filtered_B_DNA_qc_unsel_example_F_N_include_filtered_B_DNA_qc.m1'])
-    M2 = check_output(["awk", 'FNR>1{ print $2,$5,$6,$8 }', args.path+'ratios_sel_example_F_N_include_filtered_B_DNA_qc_unsel_example_F_N_include_filtered_B_DNA_qc.m2'])
-    
-    #Check for single base mutations
-    for line in StringIO.StringIO(M1):
+def Read_Enrichments():
+    global Ewt
+    global WTSeq
+  
+    awkout = ""
+    awkout = check_output(["awk", 'FNR>1{ print $2,$4,$5,$6,$8 }', args.path+'ratios_sel_example_F_N_include_filtered_B_DNA_qc_unsel_example_F_N_include_filtered_B_DNA_qc'])
+  
+    #First find the wild-type and build the arrays before we do anything else
+    for line in StringIO.StringIO(awkout):
         split = line.split(" ")
-        if int(split[1]) >= StartResidue and int(split[1]) < TranslateEnd: #Check to see that the base is in our tile
-            codonnum = int((int(split[1]) - int(StartResidue))/3) #Specific Codon Number
-            codon = split[0][StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
-            Ei = float(split[3].rstrip('\n'))
+        
+        DNASeq = split[0]
+        mutationcount = int(split[1])
+        location = str(split[2])
+        identity = str(split[3])
+        enrichment = float(split[4].rstrip('\n'))
+        
+        if mutationcount == 0: #Wild-Type
+            WTSeq = DNASeq[StartResidue:TranslateEnd] #Set the wild-type sequence that is being translated
+            Ewt = enrichment #Set the wild-type sequence enrichment
+            print "Wild-type log2 (Ewt): "+str(Ewt) #Print out the wild-type enrichment
+            Build_Mut_Arrays() #Build the arrays now
+ 
+    #Now populate the single, double, and triple mutations
+    for line in StringIO.StringIO(awkout):
+        split = line.split(" ")
+        
+        DNASeq = split[0]
+        mutationcount = int(split[1])
+        locationarr = split[2].split(",") #Note this will be splittable by ","
+        identity = str(split[3])
+        enrichment = float(split[4].rstrip('\n'))
 
-            #For FACS set a upper limit on enrichment, don't do anything for growth
-            if args.normtype == "FACS":
-                #Check to see if the enrichment is greater or equal than the theoretical
-                if OverrideEwtEi == False: #Apply no scalar to the Ei
-                    if Ei >= THEOENRICHMENT:
-                        Mutations[codonnum][codon][0] = (THEOENRICHMENT - 0.001)
-                    else:
-                        Mutations[codonnum][codon][0] = Ei
-                elif OverrideEwtEi == True: #Apply a scalar to the Ei
-                    if Ei >= (THEOENRICHMENT + EiScalar):
-                        Mutations[codonnum][codon][0] = ((THEOENRICHMENT + EiScalar) - 0.001)
-                    else:
-                        Mutations[codonnum][codon][0] = (Ei + EiScalar)
-                
-            elif args.normtype == "growth":
-                Mutations[codonnum][codon][0] = Ei
-       
-    #Check for double base mutations
-    for line in StringIO.StringIO(M2):
-        split2 = line.split(" ")
-        location = split2[1].split(",") #Get the individual mutation locations
-        
-        if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
-            if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
-                codonnum1 = int((int(location[0]) - int(StartResidue))/3)
-                codonnum2 = int((int(location[1]) - int(StartResidue))/3)
-                if codonnum1 == codonnum2:
-                    codon = split2[0][StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
-                    Ei = float(split2[3].rstrip('\n'))
-                    
-                    #For FACS set a upper limit on enrichment, don't do anything for growth
-                    if args.normtype == "FACS":
-                        #Check to see if the enrichment is greater or equal than the theoretical
-                        if OverrideEwtEi == False: #Apply no scalar to the Ei
-                            if Ei >= THEOENRICHMENT:
-                                Mutations[codonnum1][codon][0] = (THEOENRICHMENT - 0.001)
-                            else:
-                                Mutations[codonnum1][codon][0] = Ei
-                        elif OverrideEwtEi == True: #Apply a scalar to the Ei
-                            if Ei >= (THEOENRICHMENT + EiScalar):
-                                Mutations[codonnum1][codon][0] = ((THEOENRICHMENT + EiScalar) - 0.001)
-                            else:
-                                Mutations[codonnum1][codon][0] = (Ei + EiScalar)
-                        
-                    elif args.normtype == "growth":
-                        Mutations[codonnum1][codon][0] = Ei
-    
-    #Check for triple base mutations
-    for line in StringIO.StringIO(ALL):
-        split3 = line.split(" ")
-        
-        if split3[1] == "3": #Test to see that there are three mutations
-            location = split3[2].split(",") #Get the individual mutation locations
+        if mutationcount == 1: #Single mutations
+            location = int(locationarr[0])
             
-            if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
-                if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
-                    if int(location[2]) >= StartResidue and int(location[2]) < TranslateEnd: #Check to see that the base is in our tile
-                        codonnum1 = int((int(location[0]) - int(StartResidue))/3)
-                        codonnum2 = int((int(location[1]) - int(StartResidue))/3)
-                        codonnum3 = int((int(location[2]) - int(StartResidue))/3)
-                        if codonnum1 == codonnum2 and codonnum2 == codonnum3:
-                            codon = split3[0][StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
-                            Ei = float(split3[4].rstrip('\n'))
-                            
-                            #For FACS set a upper limit on enrichment, don't do anything for growth
-                            if args.normtype == "FACS":
-                                #Check to see if the enrichment is greater or equal than the theoretical
-                                if OverrideEwtEi == False: #Apply no scalar to the Ei
-                                    if Ei >= THEOENRICHMENT:
-                                        Mutations[codonnum1][codon][0] = (THEOENRICHMENT - 0.001)
-                                    else:
-                                        Mutations[codonnum1][codon][0] = Ei
-                                elif OverrideEwtEi == True: #Apply a scalar to the Ei
-                                    if Ei >= (THEOENRICHMENT + EiScalar):
-                                        Mutations[codonnum1][codon][0] = ((THEOENRICHMENT + EiScalar) - 0.001)
-                                    else:
-                                        Mutations[codonnum1][codon][0] = (Ei + EiScalar)
-                                
-                            elif args.normtype == "growth":
-                                Mutations[codonnum1][codon][0] = Ei
+            if location >= StartResidue and location < TranslateEnd: #Check to see that the base is in our tile
+                codonnum = int((location - StartResidue)/3) #Specific Codon Number
+                codon = DNASeq[StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
+                Set_Enrichment(codonnum, codon, enrichment) #Set the enrichment  
 
-    return Mutations
+        if mutationcount == 2: #Double mutations
+            location1 = int(locationarr[0])
+            location2 = int(locationarr[1]) 
+            
+            if location1 >= StartResidue and location1 < TranslateEnd: #Check to see that the base is in our tile
+                if location2 >= StartResidue and location2 < TranslateEnd: #Check to see that the base is in our tile
+                    codonnum1 = int((location1 - StartResidue)/3)
+                    codonnum2 = int((location2 - StartResidue)/3)
+                    if codonnum1 == codonnum2:
+                        codon = DNASeq[StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
+                        Set_Enrichment(codonnum1, codon, enrichment) #Set the enrichment         
+        
+        if mutationcount == 3: #There are three mutations
+            location1 = int(locationarr[0])
+            location2 = int(locationarr[1])
+            location3 = int(locationarr[2])
+            
+            if location1 >= StartResidue and location1 < TranslateEnd: #Check to see that the base is in our tile
+                if location2 >= StartResidue and location2 < TranslateEnd: #Check to see that the base is in our tile
+                    if location3 >= StartResidue and location3 < TranslateEnd: #Check to see that the base is in our tile
+                        codonnum1 = int((location1 - StartResidue)/3)
+                        codonnum2 = int((location2 - StartResidue)/3)
+                        codonnum3 = int((location3 - StartResidue)/3)
+                        if codonnum1 == codonnum2 and codonnum2 == codonnum3:
+                            codon = DNASeq[StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
+                            Set_Enrichment(codonnum2, codon, enrichment) #Set the enrichment 
+
+    return
 
 def Get_Unsel_Counts():
 	#Get the unselected counts for a variant
@@ -298,7 +270,6 @@ def Get_Unsel_Counts():
             codonnum = int((int(split[1]) - int(StartResidue))/3) #Specific Codon Number
             codon = split[0][StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
             counts = int(split[3].rstrip('\n'))
-            print str(codonnum)+codon+str(counts)
             
             Mutations[codonnum][codon][2] = counts #Set the unselected counts
             Mutations[codonnum][codon][4] = split[0][StartResidue:TranslateEnd] #Set the sequence
@@ -465,7 +436,7 @@ def Make_CSV():
     
     if args.heatmap == "True":
         #Write the heatmap to a newfile
-        outfile = open('heatmap_startresi_'+str(StartResidue)+'.csv', 'w')
+        outfile = open('CodonHeatmap.csv', 'w')
         outfile.write(Numbering+'\n')
         outfile.write(WTResi+'\n')
         outfile.write(Output)
@@ -474,20 +445,22 @@ def Make_CSV():
     return
 
 def Make_SynonCSV():
-    #Output the synonymous mutations
+    #Output the synonymous mutations  
     
-    print "ResID, Wild-Type Identity, Wild-Type Codon, Codon, Fitness Metric, Enrichment"
+    print "ResID, Wild-Type Identity, Wild-Type Codon, Codon, Fitness Metric, Enrichment, Unselected Counts, Selected Counts"
     #q is a int that will loop through all of the codons
     Output = "ResID, Wild-Type Identity, Wild-Type Codon, Codon, Fitness Metric, Enrichment\n"
     for q in xrange(0, TileLen):
         #syn is the codon(s) for the amino acid specified from WTAmino_Table
         for syn in Translation_Table_AtoD[WTAmino_Table[q]]:
             if syn == WTCodon_Table[q]:
-                print str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Ewt)
-                Output = Output + str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Ewt)+"\n"
+                continue
+                #The wild-type is removed for now
+                #print str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Ewt)+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])
+                #Output = Output + str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Ewt)+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])+"\n"
             else:
-                print str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Mutations[q][syn][0])
-                Output = Output + str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Mutations[q][syn][0])+"\n"
+                print str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Mutations[q][syn][0])+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])
+                Output = Output + str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Mutations[q][syn][0])+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])+"\n"
     
     #Write an output file
     outfile = open('SynonCSV.csv', 'w')
@@ -521,16 +494,12 @@ def main():
     print "Data path: "+args.path
     print "Unselected counts to be significant: "+str(args.sigthreshold)
 
-    #Build Mut Arrays
-    Get_WT_Ewt()
-    Build_Mut_Arrays()
+    #Build Mut Arrays and Get Enrichments
+    Read_Enrichments()
 
     #Get the selected counts
     Get_Unsel_Counts()
     Get_Sel_Counts()
-    
-    #Get the raw log2 data
-    Get_Mut_Ei()
 
     #Normalize the Data
     Normalize()
