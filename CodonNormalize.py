@@ -17,7 +17,7 @@ __author__ = "Justin R. Klesmith"
 __copyright__ = "Copyright 2016, Justin R. Klesmith"
 __credits__ = ["Justin R. Klesmith", "Timothy A. Whitehead"]
 __license__ = "BSD-3"
-__version__ = "1.0, Build: 20160129"
+__version__ = "1.2, Build: 20160129"
 __maintainer__ = "Justin R. Klesmith"
 __email__ = ["klesmit3@msu.edu", "justinklesmith@gmail.com", "justinklesmith@evodyn.com"]
 
@@ -30,8 +30,9 @@ parser.add_argument('-d', dest='stddev', action='store', help='Standard Deviatio
 parser.add_argument('-c', dest='percentcollected', action='store', help='Percent Collected? (FACS) ie: 0.05')
 parser.add_argument('-p', dest='path', action='store', required=True, help='What is the path to the tile directory? ie: ./tile/')
 parser.add_argument('-t', dest='sigthreshold', action='store', nargs='?', const=1, default=5, help='Unselected counts for significance. Default = 5')
-parser.add_argument('-o', dest='heatmap', action='store', nargs='?', const=1, default='True', help='Output a csv heatmap? Default = True')
-parser.add_argument('-x', dest='synon', action='store', nargs='?', const=1, default='False', help='Output only the synonymous mutations? Default = False')
+parser.add_argument('-o', dest='heatmap', action='store', nargs='?', const=1, default='False', help='Output a csv heatmap and file? Default = False')
+parser.add_argument('-w', dest='synonwt', action='store', nargs='?', const=1, default='False', help='Output the wild-type codons in the synonymous mutation analysis? Default = False')
+parser.add_argument('-x', dest='synon', action='store', nargs='?', const=1, default='False', help='Output the synonymous mutation analysis and file? Default = False')
 parser.add_argument('-y', dest='ewtenrichment', action='store', help='Manual Ewt enrichment value')
 parser.add_argument('-z', dest='eiscalar', action='store', help='Manual Ei enrichment scalar')
 args = parser.parse_args()
@@ -89,8 +90,13 @@ if args.normtype == "FACS":
     THEOENRICHMENT = -log(PC, 2) #Theoretical maximum enrichment
 
 Mutations = {} #Mutations matrix
+WTCodon_Table = {}
+WTAmino_Table = {}
 Ewt = None #Initialize the variable for the wildtype enrichment
+CountsUwt = None #Number of unselected counts
+CountsSwt = None #Number of selected counts
 WTSeq = None #Variable for the wild-type DNA sequence
+
 DNA_Table = {'TTT', 'TCT', 'TAT', 'TGT', 'TTC', 'TCC', 'TAC', 'TGC', 'TTA', 'TCA', 'TAA', 'TGA',
 'TTG', 'TCG', 'TAG', 'TGG', 'CTT', 'CCT', 'CAT', 'CGT', 'CTC', 'CCC', 'CAC', 'CGC',
 'CTA', 'CCA', 'CAA', 'CGA', 'CTG', 'CCG', 'CAG', 'CGG', 'ATT', 'ACT', 'AAT', 'AGT',
@@ -135,8 +141,6 @@ Translation_Table_AtoD = {
 'V' : ['GTT', 'GTC', 'GTA', 'GTG'],
 'W' : ['TGG'],
 'Y' : ['TAT', 'TAC']}
-WTCodon_Table = {}
-WTAmino_Table = {}
 
 def Build_Mut_Arrays():
     #Populate Mutation Dictionary with None Data
@@ -188,7 +192,11 @@ def Read_Enrichments():
     global WTSeq
   
     awkout = ""
-    awkout = check_output(["awk", 'FNR>1{ print $2,$4,$5,$6,$8 }', args.path+'ratios_sel_example_F_N_include_filtered_B_DNA_qc_unsel_example_F_N_include_filtered_B_DNA_qc'])
+    try:
+        awkout = check_output(["awk", 'FNR>1{ print $2,$4,$5,$6,$8 }', args.path+'ratios_sel_example_F_N_include_filtered_B_DNA_qc_unsel_example_F_N_include_filtered_B_DNA_qc'])
+    except:
+        print "AWK problem: probably incorrect path"
+        exit(1)
   
     #First find the wild-type and build the arrays before we do anything else
     for line in StringIO.StringIO(awkout):
@@ -223,6 +231,7 @@ def Read_Enrichments():
                 codonnum = int((location - StartResidue)/3) #Specific Codon Number
                 codon = DNASeq[StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
                 Set_Enrichment(codonnum, codon, enrichment) #Set the enrichment  
+                Mutations[codonnum][codon][4] = DNASeq[StartResidue:TranslateEnd] #Set the sequence
 
         if mutationcount == 2: #Double mutations
             location1 = int(locationarr[0])
@@ -235,7 +244,8 @@ def Read_Enrichments():
                     if codonnum1 == codonnum2:
                         codon = DNASeq[StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
                         Set_Enrichment(codonnum1, codon, enrichment) #Set the enrichment         
-        
+                        Mutations[codonnum1][codon][4] = DNASeq[StartResidue:TranslateEnd] #Set the sequence
+                
         if mutationcount == 3: #There are three mutations
             location1 = int(locationarr[0])
             location2 = int(locationarr[1])
@@ -249,120 +259,72 @@ def Read_Enrichments():
                         codonnum3 = int((location3 - StartResidue)/3)
                         if codonnum1 == codonnum2 and codonnum2 == codonnum3:
                             codon = DNASeq[StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
-                            Set_Enrichment(codonnum2, codon, enrichment) #Set the enrichment 
+                            Set_Enrichment(codonnum1, codon, enrichment) #Set the enrichment 
+                            Mutations[codonnum1][codon][4] = DNASeq[StartResidue:TranslateEnd] #Set the sequence
 
     return
 
-def Get_Unsel_Counts():
+def Get_Counts(Filename, ArrayKey):
+    global Mutations
 	#Get the unselected counts for a variant
     
-    ALL = ""
-    M1 = ""
-    M2 = ""
-    ALL = check_output(["awk", 'FNR>1{ print $2,$4,$5,$6,$9 }', args.path+'counts_unsel_example_F_N_include_filtered_B_DNA_qc'])
-    M1 = check_output(["awk", 'FNR>1{ print $2,$5,$6,$9 }', args.path+'counts_unsel_example_F_N_include_filtered_B_DNA_qc.m1'])
-    M2 = check_output(["awk", 'FNR>1{ print $2,$5,$6,$9 }', args.path+'counts_unsel_example_F_N_include_filtered_B_DNA_qc.m2'])
+    WildTypeCounts = None
+    awkout = ""
+    try:
+        awkout = check_output(["awk", 'FNR>1{ print $2,$4,$5,$6,$9 }', args.path+Filename])
+    except:
+        print "AWK problem: file path probably incorrect"
+        exit(1)
     
-    #Check for single base mutations
-    for line in StringIO.StringIO(M1):
+    #Loop through the file
+    for line in StringIO.StringIO(awkout):
         split = line.split(" ")
-        if int(split[1]) >= StartResidue and int(split[1]) < TranslateEnd: #Check to see that the base is in our tile
-            codonnum = int((int(split[1]) - int(StartResidue))/3) #Specific Codon Number
-            codon = split[0][StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
-            counts = int(split[3].rstrip('\n'))
-            
-            Mutations[codonnum][codon][2] = counts #Set the unselected counts
-            Mutations[codonnum][codon][4] = split[0][StartResidue:TranslateEnd] #Set the sequence
- 
-    #Check for double base mutations
-    for line in StringIO.StringIO(M2):
-        split2 = line.split(" ")
-        location = split2[1].split(",") #Get the individual mutation locations
-        
-        if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
-            if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
-                codonnum1 = int((int(location[0]) - int(StartResidue))/3)
-                codonnum2 = int((int(location[1]) - int(StartResidue))/3)
-                if codonnum1 == codonnum2:
-                    codon = split2[0][StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
-                    counts = int(split2[3].rstrip('\n'))
-                    Mutations[codonnum1][codon][2] = counts #Set the unselected counts
-                    Mutations[codonnum1][codon][4] = split2[0][StartResidue:TranslateEnd] #Set the sequence
-    
-    #Check for triple base mutations
-    for line in StringIO.StringIO(ALL):
-        split3 = line.split(" ")
-        
-        if split3[1] == "3": #Test to see that there are three mutations
-            location = split3[2].split(",") #Get the individual mutation locations
-            
-            if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
-                if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
-                    if int(location[2]) >= StartResidue and int(location[2]) < TranslateEnd: #Check to see that the base is in our tile
-                        codonnum1 = int((int(location[0]) - int(StartResidue))/3)
-                        codonnum2 = int((int(location[1]) - int(StartResidue))/3)
-                        codonnum3 = int((int(location[2]) - int(StartResidue))/3)
-                        if codonnum1 == codonnum2 and codonnum2 == codonnum3:
-                            codon = split3[0][StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
-                            counts = int(split3[4].rstrip('\n'))
-                            Mutations[codonnum1][codon][2] = counts #Set the unselected counts
-                            Mutations[codonnum1][codon][4] = split3[0][StartResidue:TranslateEnd] #Set the sequence
-                            
-	
-    return Mutations
-	
-def Get_Sel_Counts():
-	#Get the selected counts
-    
-    ALL = ""
-    M1 = ""
-    M2 = ""
-    ALL = check_output(["awk", 'FNR>1{ print $2,$4,$5,$6,$9 }', args.path+'counts_sel_example_F_N_include_filtered_B_DNA_qc'])
-    M1 = check_output(["awk", 'FNR>1{ print $2,$5,$6,$9 }', args.path+'counts_sel_example_F_N_include_filtered_B_DNA_qc.m1'])
-    M2 = check_output(["awk", 'FNR>1{ print $2,$5,$6,$9 }', args.path+'counts_sel_example_F_N_include_filtered_B_DNA_qc.m2'])
-    
-    #Check for single base mutations
-    for line in StringIO.StringIO(M1):
-        split = line.split(" ")
-        if int(split[1]) >= StartResidue and int(split[1]) < TranslateEnd: #Check to see that the base is in our tile
-            codonnum = int((int(split[1]) - int(StartResidue))/3) #Specific Codon Number
-            codon = split[0][StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
-            counts = int(split[3].rstrip('\n'))
-            Mutations[codonnum][codon][3] = counts #Set the unselected counts
- 
-    #Check for double base mutations
-    for line in StringIO.StringIO(M2):
-        split2 = line.split(" ")
-        location = split2[1].split(",") #Get the individual mutation locations
-        
-        if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
-            if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
-                codonnum1 = int((int(location[0]) - int(StartResidue))/3)
-                codonnum2 = int((int(location[1]) - int(StartResidue))/3)
-                if codonnum1 == codonnum2:
-                    codon = split2[0][StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
-                    counts = int(split2[3].rstrip('\n'))
-                    Mutations[codonnum1][codon][3] = counts #Set the unselected counts
-    
-    #Check for triple base mutations
-    for line in StringIO.StringIO(ALL):
-        split3 = line.split(" ")
-        
-        if split3[1] == "3": #Test to see that there are three mutations
-            location = split3[2].split(",") #Get the individual mutation locations
-            
-            if int(location[0]) >= StartResidue and int(location[0]) < TranslateEnd: #Check to see that the base is in our tile
-                if int(location[1]) >= StartResidue and int(location[1]) < TranslateEnd: #Check to see that the base is in our tile
-                    if int(location[2]) >= StartResidue and int(location[2]) < TranslateEnd: #Check to see that the base is in our tile
-                        codonnum1 = int((int(location[0]) - int(StartResidue))/3)
-                        codonnum2 = int((int(location[1]) - int(StartResidue))/3)
-                        codonnum3 = int((int(location[2]) - int(StartResidue))/3)
-                        if codonnum1 == codonnum2 and codonnum2 == codonnum3:
-                            codon = split3[0][StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
-                            counts = int(split3[4].rstrip('\n'))
-                            Mutations[codonnum1][codon][3] = counts #Set the unselected counts 
 
-    return Mutations
+        DNASeq = split[0]
+        mutationcount = int(split[1])
+        locationarr = split[2].split(",") #Note this will be splittable by ","
+        identity = str(split[3])
+        counts = int(split[4].rstrip('\n'))
+  
+        if mutationcount == 0: #Find the wild-type
+            WildTypeCounts = counts
+
+        if mutationcount == 1: #Single mutations
+            location = int(locationarr[0])
+            
+            if location >= StartResidue and location < TranslateEnd: #Check to see that the base is in our tile
+                codonnum = int((location - StartResidue)/3) #Specific Codon Number
+                codon = DNASeq[StartResidue+(codonnum*3):StartResidue+(codonnum*3)+3] #The mutated codon
+                Mutations[codonnum][codon][ArrayKey] = counts #Set the unselected counts
+
+        if mutationcount == 2: #Double mutations
+            location1 = int(locationarr[0])
+            location2 = int(locationarr[1])
+            
+            if location1 >= StartResidue and location1 < TranslateEnd: #Check to see that the base is in our tile
+                if location2 >= StartResidue and location2 < TranslateEnd: #Check to see that the base is in our tile
+                    codonnum1 = int((location1 - StartResidue)/3)
+                    codonnum2 = int((location2 - StartResidue)/3)
+                    if codonnum1 == codonnum2:
+                        codon = DNASeq[StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
+                        Mutations[codonnum1][codon][ArrayKey] = counts #Set the unselected counts
+
+        if mutationcount == 3: #Test to see that there are three mutations
+            location1 = int(locationarr[0])
+            location2 = int(locationarr[1])
+            location3 = int(locationarr[2])            
+            
+            if location1 >= StartResidue and location1 < TranslateEnd: #Check to see that the base is in our tile
+                if location2 >= StartResidue and location2 < TranslateEnd: #Check to see that the base is in our tile
+                    if location3 >= StartResidue and location3 < TranslateEnd: #Check to see that the base is in our tile
+                        codonnum1 = int((location1 - StartResidue)/3)
+                        codonnum2 = int((location2 - StartResidue)/3)
+                        codonnum3 = int((location3 - StartResidue)/3)
+                        if codonnum1 == codonnum2 and codonnum2 == codonnum3:
+                            codon = DNASeq[StartResidue+(codonnum1*3):StartResidue+(codonnum1*3)+3] #The mutated codon
+                            Mutations[codonnum1][codon][ArrayKey] = counts #Set the unselected counts
+
+    return WildTypeCounts
 
 def Normalize():
     print "Normalizing the data"
@@ -433,20 +395,20 @@ def Make_CSV():
             Output = Output+str(Mutations[j][i[1]][1])+","
         Output = Output+"\n"
     print Output
-    
-    if args.heatmap == "True":
-        #Write the heatmap to a newfile
-        outfile = open('CodonHeatmap.csv', 'w')
-        outfile.write(Numbering+'\n')
-        outfile.write(WTResi+'\n')
-        outfile.write(Output)
-        outfile.close()
+
+    #Write the heatmap to a newfile
+    outfile = open('CodonHeatmap.csv', 'w')
+    outfile.write(Numbering+'\n')
+    outfile.write(WTResi+'\n')
+    outfile.write(Output)
+    outfile.close()
     
     return
 
 def Make_SynonCSV():
     #Output the synonymous mutations  
     
+    print "Synonymous Mutation Analysis"
     print "ResID, Wild-Type Identity, Wild-Type Codon, Codon, Fitness Metric, Enrichment, Unselected Counts, Selected Counts"
     #q is a int that will loop through all of the codons
     Output = "ResID, Wild-Type Identity, Wild-Type Codon, Codon, Fitness Metric, Enrichment\n"
@@ -454,10 +416,12 @@ def Make_SynonCSV():
         #syn is the codon(s) for the amino acid specified from WTAmino_Table
         for syn in Translation_Table_AtoD[WTAmino_Table[q]]:
             if syn == WTCodon_Table[q]:
-                continue
-                #The wild-type is removed for now
-                #print str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Ewt)+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])
-                #Output = Output + str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Ewt)+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])+"\n"
+                if args.synonwt == 'True' or args.synonwt == 'true': 
+                    #Output wild-type data
+                    print str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Ewt)+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])
+                    Output = Output + str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Ewt)+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])+"\n"
+                else:
+                    continue
             else:
                 print str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Mutations[q][syn][0])+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])
                 Output = Output + str(q+1)+","+WTAmino_Table[q]+","+WTCodon_Table[q]+","+syn+","+Mutations[q][syn][1]+","+str(Mutations[q][syn][0])+","+str(Mutations[q][syn][2])+","+str(Mutations[q][syn][3])+"\n"
@@ -470,6 +434,9 @@ def Make_SynonCSV():
     return
 
 def main():
+    global CountsUwt
+    global CountsSwt
+    
     #Write out preamble
     print "CodonNormalize for growth or FACS selections"
     print __author__
@@ -497,15 +464,20 @@ def main():
     #Build Mut Arrays and Get Enrichments
     Read_Enrichments()
 
+    #Get the unselected counts
+    CountsUwt = Get_Counts('counts_unsel_example_F_N_include_filtered_B_DNA_qc', 2)
+    print "Number of unselected wild-type counts: "+str(CountsUwt)
+    
     #Get the selected counts
-    Get_Unsel_Counts()
-    Get_Sel_Counts()
+    CountsSwt = Get_Counts('counts_sel_example_F_N_include_filtered_B_DNA_qc', 3)
+    print "Number of selected wild-type counts: "+str(CountsSwt)
 
     #Normalize the Data
     Normalize()
 
     #Output a CSV
-    Make_CSV()
+    if args.heatmap == 'True' or args.heatmap == 'true':
+        Make_CSV()
     
     #Run the synonymous mutation analysis
     if args.synon == 'True' or args.synon == 'true':
