@@ -343,16 +343,25 @@ def Normalize():
                 if args.normtype == "growth":
                     Mutant = (Ei/DoublingsGp)+1
                     WT = (Ewt/DoublingsGp)+1
-                    NE = log(Mutant/WT, 2)
+                    try:
+                        NE = log(Mutant/WT, 2)
+                    except ValueError:
+                        NE = "Error"
                 elif args.normtype == "FACS":
                     WT = special.erfinv(1-PC*pow(2,(Ewt+1)))
                     Mutant = special.erfinv(1-PC*pow(2,(Ei+1)))
-                    NE = (log(e, 2)*sqrt(2)*SD*(WT-Mutant))
+                    try:
+                        NE = (log(e, 2)*sqrt(2)*SD*(WT-Mutant))
+                    except ValueError:
+                        NE = "Error"
                 else:
                     print "Error: growth or FACS not set?"
                     quit()
                 
-                Mutations[j][i[1]][1] = "{0:.2f}".format(NE)
+                try:
+                    Mutations[j][i[1]][1] = "{0:.2f}".format(NE)
+                except ValueError:
+                    Mutations[j][i[1]][1] = NE #For cases where the math breaks down for the error value
             elif Mutations[j][i[1]][2] < SignificantThreshold: #Report the insignificant NEs
                 if WTCodon_Table[j] == i[1]: #Check to see if it's wildtype else it's Not Significant
                     Mutations[j][i[1]][1] = "0.0"
