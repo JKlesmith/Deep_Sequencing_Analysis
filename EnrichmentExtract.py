@@ -2,103 +2,55 @@
 
 #Copyright (c) 2016, Justin R. Klesmith
 #All rights reserved.
-#QuickNormalize: Normalize tiles from a growth or FACS selection
+#EnrichmentExtract : Process the raw enrichments from the Enrich project dirs
 
 from __future__ import division
 from subprocess import check_output
 from math import log, sqrt, pow, e
 from scipy import special
 import numpy as np
-import StringIO
-import argparse
-import time
-import os
+import StringIO, argparse, time, os
 
 #Set the author information
 __author__ = "Justin R. Klesmith"
 __copyright__ = "Copyright 2016, Justin R. Klesmith"
-__credits__ = ["Justin R. Klesmith", "Caitlin A. Kowalsky", "Timothy A. Whitehead"]
+__credits__ = ["Justin R. Klesmith", "Timothy A. Whitehead"]
 __license__ = "BSD-3"
-__version__ = "2.1, Build: 20160628"
+__version__ = "1.0, Build: 20160708"
 __maintainer__ = "Justin R. Klesmith"
 __email__ = ["klesmit3@msu.edu", "justinklesmith@gmail.com", "justinklesmith@evodyn.com"]
 
 #Get commandline arguments
 parser = argparse.ArgumentParser(description='QuickNormalize '+__version__+' for Growth or FACS')
-parser.add_argument('-n', dest='normtype', action='store', required=True, help='Normalization Type? Enter: growth or FACS')
 parser.add_argument('-s', dest='startresidue', action='store', required=True, help='What is the start residue? ie: 0, 40, 80')
-parser.add_argument('-l', dest='length', action='store', required=True, help='Length of your tile? ie: 40, 80')
-parser.add_argument('-g', dest='gp', action='store', help='How many doublings/generations? (GROWTH) ie: 12.5')
-parser.add_argument('-d', dest='stddev', action='store', help='Standard Deviation? (FACS) ie: 0.6')
-parser.add_argument('-c', dest='percentcollected', action='store', help='Percent Collected? (FACS) ie: 0.05')
-parser.add_argument('-p', dest='path', action='store', required=True, help='What is the path to the enrich output directory? ie: ./tile/data/output/')
+parser.add_argument('-o', dest='outputfilename', action='store', help='Output file name for the heatmap')
+parser.add_argument('-p', dest='path', action='store', required=True, help='What is the path to the enrich project directory? ie: ./tile/data/output/')
 parser.add_argument('-t', dest='sigthreshold', action='store', nargs='?', const=1, default=5, help='Unselected counts for significance. Default = 5')
-parser.add_argument('-w', dest='wildtype', action='store', nargs='?', const=1, default='./WTSeq', help='File with the wild-type amino acid sequence. Default = ./WTSeq')
-parser.add_argument('-o', dest='heatmap', action='store', nargs='?', const=1, default='True', help='Output a csv heatmap? Default = True') 
-parser.add_argument('-y', dest='ewtenrichment', action='store', help='Manual Ewt enrichment value')
-parser.add_argument('-z', dest='eiscalar', action='store', help='Manual Ei enrichment scalar')
 args = parser.parse_args()
 
 #Verify inputs
-if args.normtype != "growth" and args.normtype != "FACS":
-    print "Missing normalization type. Flag: -n"
+if args.path == None:
+    print "Enrich Project Path Missing"
     quit()
     
-if args.startresidue == None:
-    print "Missing start residue. Flag: -s"
-    quit()
-
-if args.length == None:
-    print "Missing tile length. Flag: -l"
-    quit()
-
-if args.gp == None and args.normtype == "growth":
-    print "Missing doublings. Flag: -g"
-    quit()
-
-if args.stddev == None and args.normtype == "FACS":
-    print "Missing SD. Flag: -d"
-    quit()
-
-if args.percentcollected == None and args.normtype == "FACS":
-    print "Missing percent collected. Flag: -c"
-    quit() 
-
-if args.path == None:
-    print "Missing Enrich output path. Flag: -p"
-    quit()
-
-if args.ewtenrichment and args.eiscalar != None:
-    #This section is only true if we want to provide our own WT enrichment and a scalar to add to Ei
-    OverrideEwtEi = True
-    ManualEwt = float(args.ewtenrichment)
-    EiScalar = float(args.eiscalar)
-else:
-    OverrideEwtEi = False
-
-#Global Variables
-if os.path.isfile(args.wildtype):
-    with open(args.wildtype, 'r') as infile: #Open the file with the wild-type protein sequence
-        WTSeq = infile.readline() #Read the first line of the WT sequence file
-else:
-    print "Wild-type sequence file not found...exit"
-    quit()
-
-StartResidue = int(args.startresidue) #Starting residue for your tile
-TileLen = int(args.length) #Length of your tile
-Path = args.path #What is the path to the output directory
+StartResidue = int(args.startresidue) #Starting residue for your tile   
+OutputFilename = args.outputfilename #Name for the heatmap csv
+Path = args.path+"/data/output/" #What is the path to the output directory
+ConfigPath = args.path+"/input/example_local_config" #Path to the config file
 SignificantThreshold = int(args.sigthreshold) #Number of counts in the unselected library and selected library to be significant
 
-if args.normtype == "growth":
-    DoublingsGp = float(args.gp) #Number of doublings
+with open(ConfigPath) as infile:
+    for line in infile:
+        if line.startswith("<wtPRO>"):
+            Len = len(line)
+            WTSeq = line[7:Len-10]
+            TileLen = len(WTSeq)
 
-if args.normtype == "FACS":
-    SD = float(args.stddev) #Standard Deviation
-    PC = float(args.percentcollected) #Percent collected
-    THEOENRICHMENT = -log(PC, 2) #Theoretical maximum enrichment
-
-#AA_Table = '*ACDEFGHIKLMNPQRSTVWY'
-AA_Table = '*FWYPMILVAGCSTNQDEHKR'
+print WTSeq
+print TileLen            
+            
+AA_Table = '*ACDEFGHIKLMNPQRSTVWY'
+#AA_Table = '*FWYPMILVAGCSTNQDEHKR'
 
 Mutations = {} #Mutations matrix
 Ewt = None #Initialize the variable for the wildtype enrichment
@@ -122,7 +74,7 @@ def Build_Matrix():
     for j in xrange(0,TileLen):
         for i in enumerate(AA_Table):
             try:
-                #Mutations[ResID][MutID[1]][0 = RawLog2, 1 = Fitness, 2 = Unselected, 3 = Selected, 4=Unused, 5=WT]
+                #Mutations[ResID][MutID[1]][0 = RawLog2, 1 = Depleted Enrichments, 2 = Unselected, 3 = Selected, 4=Unused, 5=WT]
                 Mutations[j][i[1]] = [None, None, None, None, None, False]
             except KeyError:
                 Mutations[j] = {}
@@ -226,23 +178,8 @@ def Get_Mut_Ei():
         #Check to see if we're above the tile length and go to next
         if location >= TileLen:
             continue
-        
-        #For FACS set a upper limit on enrichment, don't do anything for growth
-        if args.normtype == "FACS":
-            #Check to see if the enrichment is greater or equal than the theoretical
-            if OverrideEwtEi == False: #Apply no scalar to the Ei
-                if Ei >= THEOENRICHMENT:
-                    Mutations[location][identity][0] = (THEOENRICHMENT - 0.001)
-                else:
-                    Mutations[location][identity][0] = Ei
-            elif OverrideEwtEi == True: #Apply a scalar to the Ei
-                if Ei >= (THEOENRICHMENT + EiScalar):
-                    Mutations[location][identity][0] = ((THEOENRICHMENT + EiScalar) - 0.001)
-                else:
-                    Mutations[location][identity][0] = (Ei + EiScalar)
-            
-        elif args.normtype == "growth":
-            Mutations[location][identity][0] = Ei
+
+        Mutations[location][identity][0] = Ei
 
     return Mutations
 
@@ -315,58 +252,56 @@ def Get_Sel_Counts():
 #This normalizes the enrichments to the wild-type using the fitness metric equations
 ######################################################################################
 
-def Normalize():
+def Enrich():
     #Check to see if the wild-type enrichment is set
     if Ewt == None:
         print "Error: Wild-Type enrichment is not set...quit"
         quit()
 
     print ""
-    print "Normalizing the data"
-    print "Location,Mutation,Normalized_ER,Unselected_Reads,Selected_Reads,RawLog2"
+    print "Tabular Data"
+    print "Location,Mutation,Enrichment,Depleted_Enrichment,Unselected_Reads,Selected_Reads"
     
     for j in xrange(0,TileLen):
         for i in enumerate(AA_Table):
+            Enrichment = None
+            DepEnrichment = None
+            UCounts = None
+            SCounts = None
+            DepEnrichment = "False"
+        
         	#Check for a case where a significant variant fell out of the population
             if Mutations[j][i[1]][0] == None and Mutations[j][i[1]][2] >= SignificantThreshold and Mutations[j][i[1]][3] == None:
-                Mutations[j][i[1]][0] = log((1/Mutations[j][i[1]][2]), 2) #Calculate the raw log2 for this variant and report it as less than this value
-        
-            #Calculate the fitness
-            if Mutations[j][i[1]][0] != None and Mutations[j][i[1]][2] >= SignificantThreshold: #Report the significant fitness
-                Ei = float(Mutations[j][i[1]][0])
+                Enrichment = log((1/Mutations[j][i[1]][2]), 2) #Calculate the raw log2 for this variant and report it as less than this value
+                Mutations[j][i[1]][1] = Enrichment
+                DepEnrichment = "True"
+                UCounts = Mutations[j][i[1]][2]
+                SCounts = Mutations[j][i[1]][3]
                 
-                if args.normtype == "growth":
-                    Mutant = (Ei/DoublingsGp)+1
-                    WT = (Ewt/DoublingsGp)+1
-                    if (Mutant/WT) < 0:
-                        NE = -10 #Assign an extremely negative fitness for members who are greather than -8 raw log2 enrichment
-                    else:
-                        NE = log(Mutant/WT, 2)
-                elif args.normtype == "FACS":              
-                    WT = special.erfinv(1-PC*pow(2,(Ewt+1)))
-                    Mutant = special.erfinv(1-PC*pow(2,(Ei+1)))
-                    NE = (log(e, 2)*sqrt(2)*SD*(WT-Mutant))
-                else:
-                    print "Error: growth or FACS not set?"
-                    quit()
-                
-                Mutations[j][i[1]][1] = "{0:.4f}".format(NE)
+            #Report the regular enrichment
+            elif Mutations[j][i[1]][0] != None and Mutations[j][i[1]][2] >= SignificantThreshold: #Report the significant enrichments
+                Enrichment = Mutations[j][i[1]][0]
+                Mutations[j][i[1]][1] = Enrichment
+                UCounts = Mutations[j][i[1]][2]
+                SCounts = Mutations[j][i[1]][3]
+            
             elif Mutations[j][i[1]][2] < SignificantThreshold: #Report the insignificant NEs
-                if WTSeq[j+StartResidue] == i[1]: #Check to see if it's wildtype else it's Not Significant
-                    Mutations[j][i[1]][0] = Ewt
-                    Mutations[j][i[1]][1] = "0.000"
-                    Mutations[j][i[1]][2] = UCwt
-                    Mutations[j][i[1]][3] = SCwt
-                    Mutations[j][i[1]][5] = True #Set the WT flag
-            	else:
-                    Mutations[j][i[1]][1] = "NS" 
+                if WTSeq[j] == i[1]: #Check to see if it's wildtype else it's Not Significant
+                    Enrichment = Ewt
+                    Mutations[j][i[1]][1] = Ewt
+                    UCounts = UCwt
+                    SCounts = SCwt
+                    Mutations[j][i[1]][5] = True #Set the WT flag 
+            
             elif Mutations[j][i[1]][2] == None and Mutations[j][i[1]][3] >= SignificantThreshold: #Error: Mutation with selected counts and no unselected
-                Mutations[j][i[1]][1] = "Error: Sel with Zero Unsel"
+                Enrichment = "Error: Sel with Zero Unsel"
+            
             else:
-                print "Error: unknown normalization problem."
+                print "Error: unknown enrichment problem."
+                
                 
             #Print out column data
-            print str(j+StartResidue)+","+i[1]+","+Mutations[j][i[1]][1]+","+str(Mutations[j][i[1]][2])+","+str(Mutations[j][i[1]][3])+","+str(Mutations[j][i[1]][0])
+            print str(j+StartResidue)+","+i[1]+","+str(Enrichment)+","+DepEnrichment+","+str(UCounts)+","+str(SCounts)
     
     return Mutations
 
@@ -376,19 +311,19 @@ def Normalize():
 ######################################################################################
     
 def Make_CSV():
-    print "Normalized Heatmap"
+    print "Enrichment Heatmap"
     #This makes a CSV style report of rows of letters and columns of residues
     
     #Print off the Number
     Numbering = " "
-    for q in xrange(1,TileLen+1):
+    for q in xrange(0,TileLen):
         Numbering = Numbering+","+str(StartResidue+q)
     print Numbering
         
     #Print off the WT Residue
     WTResi = " "
     for w in xrange(0,TileLen):
-        WTResi = WTResi+","+WTSeq[StartResidue+w]
+        WTResi = WTResi+","+WTSeq[w]
     print WTResi
     
     #Print off the mutations
@@ -399,13 +334,12 @@ def Make_CSV():
             Output = Output+str(Mutations[j][i[1]][1])+","
         Output = Output+"\n"
     print Output
-    
-    if args.heatmap == "True":
-        #Write the heatmap to a newfile
-        outfile = open('heatmap_startresi_'+str(StartResidue)+'.csv', 'w')
-        outfile.write(Numbering+'\n')
-        outfile.write(WTResi+'\n')
-        outfile.write(Output)
+
+    #Write the heatmap to a newfile
+    outfile = open('heatmap_'+OutputFilename+'.csv', 'w')
+    outfile.write(Numbering+'\n')
+    outfile.write(WTResi+'\n')
+    outfile.write(Output)
     
     return
 
@@ -416,40 +350,6 @@ def Make_CSV():
 ######################################################################################    
     
 def main():
-    global Ewt
-    
-    #Write out preamble
-    print "QuickNormalize"
-    print "Author: "+__author__
-    print "Contact: "+__email__[0]+", "+__email__[1]+", "+__email__[2]
-    print __copyright__
-    print "Version: "+__version__
-    print "License: "+__license__
-    print "Credits: "+__credits__[0]+", "+__credits__[1]+", "+__credits__[2]
-    print ""
-    print "Please cite:"
-    print "Github [user: JKlesmith] (www.github.com)"
-    print "Kowalsky CA, Klesmith JR, Stapleton JA, Kelly V, Reichkitzer N, Whitehead TA. 2015. High-Resolution Sequence-Function Mapping of Full-Length Proteins. PLoS ONE 10(3):e0118193. doi:10.1371/journal.pone.0118193."
-    print "Klesmith JR, Bacik J-P, Michalczyk R, Whitehead TA. 2015. Comprehensive Sequence-Flux Mapping of a Levoglucosan Utilization Pathway in E. coli."
-    print ""
-    print "Normalization run parameters:"
-    print time.strftime("%H:%M:%S")
-    print time.strftime("%m/%d/%Y")
-    print "Start residue (-s): "+args.startresidue
-    print "Normalization type (-n): "+args.normtype
-    if args.normtype == "growth":
-        print "GROWTH: Doublings (gp) (-g): "+args.gp
-
-    if args.normtype == "FACS":
-        print "FACS: SD (-d): "+args.stddev
-        print "FACS: Percent Collected (-c): "+args.percentcollected
-        print "FACS: Theoretical max enrichment based off of percent collected: "+str(THEOENRICHMENT)
-    
-    print "Tile Length (-l): "+args.length
-    print "Enrich output directory (-p): "+args.path
-    print "Unselected counts to be significant (-t): "+str(args.sigthreshold)
-    print "Wild-type sequence file (-w): "+args.wildtype
-    
     #Build Matrix
     Build_Matrix()
     
@@ -457,21 +357,12 @@ def main():
     Get_Unsel_Counts()
     Get_Sel_Counts()
     
-    #Get the raw log2 data
-    if OverrideEwtEi == True:
-        #Set the manual Ewt enrichment
-        Ewt = ManualEwt
-        print "Manually set Ewt (-y): "+str(Ewt)
-        print "Ei scalar transform (-z): "+str(EiScalar)
-    else:
-        Get_WT()
-
+    #Get the enrichments
+    Get_WT()
     Get_Mut_Ei()
     
-    #Normalize the Data
-    Normalize()
-
-    #Print out a csv
+    #Process the data
+    Enrich()
     Make_CSV()
 
 if __name__ == '__main__':
