@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-#Copyright (c) 2015, Justin R. Klesmith
+#Copyright (c) 2016, Justin R. Klesmith
 #All rights reserved.
 #QuickStats: Get the statistics from a enrich run
 
@@ -16,7 +16,7 @@ __author__ = "Justin R. Klesmith"
 __copyright__ = "Copyright 2015, Justin R. Klesmith"
 __credits__ = ["Justin R. Klesmith", "Timothy A. Whitehead"]
 __license__ = "BSD-3"
-__version__ = "1.3, Build: 20150616"
+__version__ = "1.4X, Build: 201507X"
 __maintainer__ = "Justin R. Klesmith"
 __email__ = "klesmit3@msu.edu"
 

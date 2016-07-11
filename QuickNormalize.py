@@ -19,7 +19,7 @@ __author__ = "Justin R. Klesmith"
 __copyright__ = "Copyright 2016, Justin R. Klesmith"
 __credits__ = ["Justin R. Klesmith", "Caitlin A. Kowalsky", "Timothy A. Whitehead"]
 __license__ = "BSD-3"
-__version__ = "2.1, Build: 20160628"
+__version__ = "2.2x, Build: 201607X"
 __maintainer__ = "Justin R. Klesmith"
 __email__ = ["klesmit3@msu.edu", "justinklesmith@gmail.com", "justinklesmith@evodyn.com"]
 
@@ -27,20 +27,21 @@ __email__ = ["klesmit3@msu.edu", "justinklesmith@gmail.com", "justinklesmith@evo
 parser = argparse.ArgumentParser(description='QuickNormalize '+__version__+' for Growth or FACS')
 parser.add_argument('-n', dest='normtype', action='store', required=True, help='Normalization Type? Enter: growth or FACS')
 parser.add_argument('-s', dest='startresidue', action='store', required=True, help='What is the start residue? ie: 0, 40, 80')
-parser.add_argument('-l', dest='length', action='store', required=True, help='Length of your tile? ie: 40, 80')
+#parser.add_argument('-l', dest='length', action='store', required=True, help='Length of your tile? ie: 40, 80')
 parser.add_argument('-g', dest='gp', action='store', help='How many doublings/generations? (GROWTH) ie: 12.5')
 parser.add_argument('-d', dest='stddev', action='store', help='Standard Deviation? (FACS) ie: 0.6')
 parser.add_argument('-c', dest='percentcollected', action='store', help='Percent Collected? (FACS) ie: 0.05')
+parser.add_argument('-q', dest='heatfilename', action='store', help='Name for your heatmap')
 parser.add_argument('-p', dest='path', action='store', required=True, help='What is the path to the enrich output directory? ie: ./tile/data/output/')
 parser.add_argument('-t', dest='sigthreshold', action='store', nargs='?', const=1, default=5, help='Unselected counts for significance. Default = 5')
-parser.add_argument('-w', dest='wildtype', action='store', nargs='?', const=1, default='./WTSeq', help='File with the wild-type amino acid sequence. Default = ./WTSeq')
+#parser.add_argument('-w', dest='wildtype', action='store', nargs='?', const=1, default='./WTSeq', help='File with the wild-type amino acid sequence. Default = ./WTSeq')
 parser.add_argument('-o', dest='heatmap', action='store', nargs='?', const=1, default='True', help='Output a csv heatmap? Default = True') 
 parser.add_argument('-y', dest='ewtenrichment', action='store', help='Manual Ewt enrichment value')
 parser.add_argument('-z', dest='eiscalar', action='store', help='Manual Ei enrichment scalar')
 args = parser.parse_args()
 
 #Verify inputs
-if args.normtype != "growth" and args.normtype != "FACS":
+if args.normtype != "growth" and args.normtype != "FACS" and args.normtype != "Plate1" and args.normtype != "Plate2":
     print "Missing normalization type. Flag: -n"
     quit()
     
@@ -48,9 +49,9 @@ if args.startresidue == None:
     print "Missing start residue. Flag: -s"
     quit()
 
-if args.length == None:
-    print "Missing tile length. Flag: -l"
-    quit()
+#if args.length == None:
+    #print "Missing tile length. Flag: -l"
+    #quit()
 
 if args.gp == None and args.normtype == "growth":
     print "Missing doublings. Flag: -g"
@@ -77,17 +78,24 @@ else:
     OverrideEwtEi = False
 
 #Global Variables
-if os.path.isfile(args.wildtype):
-    with open(args.wildtype, 'r') as infile: #Open the file with the wild-type protein sequence
-        WTSeq = infile.readline() #Read the first line of the WT sequence file
-else:
-    print "Wild-type sequence file not found...exit"
-    quit()
+#if os.path.isfile(args.wildtype):
+    #with open(args.wildtype, 'r') as infile: #Open the file with the wild-type protein sequence
+        #WTSeq = infile.readline() #Read the first line of the WT sequence file
+#else:
+    #print "Wild-type sequence file not found...exit"
+    #quit()
 
 StartResidue = int(args.startresidue) #Starting residue for your tile
-TileLen = int(args.length) #Length of your tile
-Path = args.path #What is the path to the output directory
 SignificantThreshold = int(args.sigthreshold) #Number of counts in the unselected library and selected library to be significant
+Path = args.path+"/data/output/" #What is the path to the output directory
+ConfigPath = args.path+"/input/example_local_config" #Path to the config file
+
+with open(ConfigPath) as infile:
+    for line in infile:
+        if line.startswith("<wtPRO>"):
+            Len = len(line)
+            WTSeq = line[7:Len-10]
+            TileLen = len(WTSeq)
 
 if args.normtype == "growth":
     DoublingsGp = float(args.gp) #Number of doublings
@@ -346,6 +354,10 @@ def Normalize():
                     WT = special.erfinv(1-PC*pow(2,(Ewt+1)))
                     Mutant = special.erfinv(1-PC*pow(2,(Ei+1)))
                     NE = (log(e, 2)*sqrt(2)*SD*(WT-Mutant))
+                elif args.normtype == "Plate1":
+                    NE = (pow(2, Ei))/(pow(2, Ewt))                
+                elif args.normtype == "Plate2":
+                    NE = (Ei/Ewt)
                 else:
                     print "Error: growth or FACS not set?"
                     quit()
@@ -402,7 +414,7 @@ def Make_CSV():
     
     if args.heatmap == "True":
         #Write the heatmap to a newfile
-        outfile = open('heatmap_startresi_'+str(StartResidue)+'.csv', 'w')
+        outfile = open('fitnessheatmap_'+args.heatfilename+'_'+str(StartResidue)+'.csv', 'w')
         outfile.write(Numbering+'\n')
         outfile.write(WTResi+'\n')
         outfile.write(Output)
@@ -445,10 +457,11 @@ def main():
         print "FACS: Percent Collected (-c): "+args.percentcollected
         print "FACS: Theoretical max enrichment based off of percent collected: "+str(THEOENRICHMENT)
     
-    print "Tile Length (-l): "+args.length
-    print "Enrich output directory (-p): "+args.path
+    print "Tile Length: "+TileLen
+    print "Enrich directory (-p): "+args.path
     print "Unselected counts to be significant (-t): "+str(args.sigthreshold)
-    print "Wild-type sequence file (-w): "+args.wildtype
+    #print "Wild-type sequence file (-w): "+args.wildtype
+    print "Wild-type sequence: "+WTSeq
     
     #Build Matrix
     Build_Matrix()

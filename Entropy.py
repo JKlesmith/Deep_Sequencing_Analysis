@@ -20,15 +20,41 @@ __email__ = ["klesmit3@msu.edu", "justinklesmith@gmail.com", "justinklesmith@evo
 
 #Get commandline arguments
 parser = argparse.ArgumentParser(description='Shannon Entropy '+__version__)
+parser.add_argument('-n', dest='normtype', action='store', required=True, help='Normalization Type? Enter: NonFACS or FACS')
 parser.add_argument('-s', dest='startresidue', action='store', required=True, help='What is the start residue? ie: 0, 40, 80')
+parser.add_argument('-d', dest='stddev', action='store', help='Standard Deviation? (FACS) ie: 0.6')
+parser.add_argument('-c', dest='percentcollected', action='store', help='Percent Collected? (FACS) ie: 0.05')
 parser.add_argument('-t', dest='sigthreshold', action='store', nargs='?', const=1, default=5, help='Unselected counts for significance. Default = 5')
 parser.add_argument('-p', dest='path', action='store', required=True, help='What is the path to the enrich  directory? ie: ./tile/')
+parser.add_argument('-y', dest='ewtenrichment', action='store', help='Manual Ewt enrichment value')
+parser.add_argument('-z', dest='eiscalar', action='store', help='Manual Ei enrichment scalar')
 args = parser.parse_args()
 
 #Verify inputs
 if args.path == None:
     print "Enrich Project Path Missing"
     quit()
+    
+if args.stddev == None and args.normtype == "FACS":
+    print "Missing SD. Flag: -d"
+    quit()
+else:
+    SD = float(args.stddev) #Standard Deviation
+
+if args.percentcollected == None and args.normtype == "FACS":
+    print "Missing percent collected. Flag: -c"
+    quit()
+else:
+    PC = float(args.percentcollected) #Percent collected
+    THEOENRICHMENT = -log(PC, 2) #Theoretical maximum enrichment 
+
+if args.ewtenrichment and args.eiscalar != None:
+    #This section is only true if we want to provide our own WT enrichment and a scalar to add to Ei
+    OverrideEwtEi = True
+    ManualEwt = float(args.ewtenrichment)
+    EiScalar = float(args.eiscalar)
+else:
+    OverrideEwtEi = False    
     
 StartResidue = int(args.startresidue) #Starting residue for your tile   
 Path = args.path+"/data/output/" #What is the path to the output directory
@@ -48,7 +74,6 @@ Ewt = None #Initialize the variable for the wildtype enrichment
 UCwt = None #Unselected WT counts
 SCwt = None #Selected WT counts
 
-    
 def Build_Matrix():
     #Populate mutation array with None data
     for j in xrange(0,TileLen):
@@ -153,7 +178,21 @@ def Get_Mut_Ei():
             continue
 
         Ei = float(split[2].rstrip('\n'))
-        Mutations[location][identity][0] = Ei
+        
+        #Check to see if the enrichment is greater or equal than the theoretical
+        if args.normtype == "FACS":
+            if OverrideEwtEi == False: #Apply no scalar to the Ei
+                if Ei >= THEOENRICHMENT:
+                    Mutations[location][identity][0] = (THEOENRICHMENT - 0.001)
+                else:
+                    Mutations[location][identity][0] = Ei
+            elif OverrideEwtEi == True: #Apply a scalar to the Ei
+                if Ei >= (THEOENRICHMENT + EiScalar):
+                    Mutations[location][identity][0] = ((THEOENRICHMENT + EiScalar) - 0.001)
+                else:
+                    Mutations[location][identity][0] = (Ei + EiScalar)
+        else:
+            Mutations[location][identity][0] = Ei
 
     return Mutations
 
@@ -220,7 +259,7 @@ def Shannon():
 
     print ""
     print "Shannon Entropy"
-    print "Residue Number,Shannon Entropy,Number of Mutations Counted+WT"
+    print "Location,WT Residue,Shannon Entropy,Number of Mutations Counted+WT"
     
     #Check to see if the wild-type enrichment is set
     if Ewt == None:
@@ -267,7 +306,7 @@ def Shannon():
             print "Your tile length is possibly too long or there is no mutations besides WT at position "+str(j)
         
         #Output the entropy values
-        print str(StartResidue+j)+","+str(SE)+","+str(NumMutinCol(j))
+        print str(StartResidue+j)++","+str(SE)+","+str(NumMutinCol(j))
 
     return
     
@@ -290,7 +329,7 @@ def main():
     print time.strftime("%H:%M:%S")
     print time.strftime("%m/%d/%Y")
     print "Start residue (-s): "+str(StartResidue)
-    print "Tile length (-l): "+str(TileLen)
+    print "Tile length: "+str(TileLen)
     print "Significant count threshold (-t): "+str(SignificantThreshold)
     print "Enrich directory (-p): "+Path
 
@@ -304,7 +343,14 @@ def main():
     Get_Unsel_Counts()
     
     #Get the log2 data
-    Get_WT_Ewt()
+    if OverrideEwtEi == True:
+        #Set the manual Ewt enrichment
+        Ewt = ManualEwt
+        print "Manually set Ewt (-y): "+str(Ewt)
+        print "Ei scalar transform (-z): "+str(EiScalar)
+    else:
+        Get_WT_Ewt()
+    
     Get_Mut_Ei()
     
     #Print out a csv
