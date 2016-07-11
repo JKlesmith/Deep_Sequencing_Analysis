@@ -16,15 +16,15 @@ __author__ = "Justin R. Klesmith"
 __copyright__ = "Copyright 2016, Justin R. Klesmith"
 __credits__ = ["Justin R. Klesmith", "Timothy A. Whitehead"]
 __license__ = "BSD-3"
-__version__ = "1.0, Build: 20160708"
+__version__ = "1.X, Build: 201607X"
 __maintainer__ = "Justin R. Klesmith"
 __email__ = ["klesmit3@msu.edu", "justinklesmith@gmail.com", "justinklesmith@evodyn.com"]
 
 #Get commandline arguments
 parser = argparse.ArgumentParser(description='QuickNormalize '+__version__+' for Growth or FACS')
 parser.add_argument('-s', dest='startresidue', action='store', required=True, help='What is the start residue? ie: 0, 40, 80')
-parser.add_argument('-o', dest='outputfilename', action='store', help='Output file name for the heatmap')
-parser.add_argument('-p', dest='path', action='store', required=True, help='What is the path to the enrich project directory? ie: ./tile/data/output/')
+parser.add_argument('-q', dest='heatfilename', action='store', help='File name for the heatmap')
+parser.add_argument('-p', dest='path', action='store', required=True, help='What is the path to the enrich project directory? ie: ./tile/')
 parser.add_argument('-t', dest='sigthreshold', action='store', nargs='?', const=1, default=5, help='Unselected counts for significance. Default = 5')
 args = parser.parse_args()
 
@@ -34,7 +34,7 @@ if args.path == None:
     quit()
     
 StartResidue = int(args.startresidue) #Starting residue for your tile   
-OutputFilename = args.outputfilename #Name for the heatmap csv
+OutputFilename = args.heatfilename #Name for the heatmap csv
 Path = args.path+"/data/output/" #What is the path to the output directory
 ConfigPath = args.path+"/input/example_local_config" #Path to the config file
 SignificantThreshold = int(args.sigthreshold) #Number of counts in the unselected library and selected library to be significant
@@ -49,8 +49,8 @@ with open(ConfigPath) as infile:
 print WTSeq
 print TileLen            
             
-AA_Table = '*ACDEFGHIKLMNPQRSTVWY'
-#AA_Table = '*FWYPMILVAGCSTNQDEHKR'
+#AA_Table = '*ACDEFGHIKLMNPQRSTVWY'
+AA_Table = '*FWYPMILVAGCSTNQDEHKR'
 
 Mutations = {} #Mutations matrix
 Ewt = None #Initialize the variable for the wildtype enrichment
@@ -259,7 +259,7 @@ def Enrich():
         quit()
 
     print ""
-    print "Tabular Data"
+    print "Raw Enrichment Data"
     print "Location,Mutation,Enrichment,Depleted_Enrichment,Unselected_Reads,Selected_Reads"
     
     for j in xrange(0,TileLen):
@@ -336,7 +336,7 @@ def Make_CSV():
     print Output
 
     #Write the heatmap to a newfile
-    outfile = open('heatmap_'+OutputFilename+'.csv', 'w')
+    outfile = open('enrichmentheatmap_'+OutputFilename+'_'+str(StartResidue)+'.csv', 'w')
     outfile.write(Numbering+'\n')
     outfile.write(WTResi+'\n')
     outfile.write(Output)

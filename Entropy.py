@@ -14,7 +14,7 @@ __author__ = "Justin R. Klesmith"
 __copyright__ = "Copyright 2016, Justin R. Klesmith"
 __credits__ = ["Justin R. Klesmith", "Timothy A. Whitehead"]
 __license__ = "BSD-3"
-__version__ = "1.0, Build: 20160708"
+__version__ = "1.X, Build: 201607X"
 __maintainer__ = "Justin R. Klesmith"
 __email__ = ["klesmit3@msu.edu", "justinklesmith@gmail.com", "justinklesmith@evodyn.com"]
 
@@ -232,7 +232,7 @@ def AssignWT():
 
     for j in xrange(0,TileLen):
         for i in enumerate(AA_Table):
-            if i[1] == WTSeq[StartResidue+j]:
+            if i[1] == WTSeq[j]:
                 Mutations[j][i[1]][5] = True
 
     return Mutations
@@ -306,7 +306,7 @@ def Shannon():
             print "Your tile length is possibly too long or there is no mutations besides WT at position "+str(j)
         
         #Output the entropy values
-        print str(StartResidue+j)++","+str(SE)+","+str(NumMutinCol(j))
+        print str(StartResidue+j)+","+WTSeq[j]+","+str(SE)+","+str(NumMutinCol(j))
 
     return
     

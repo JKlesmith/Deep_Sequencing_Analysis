@@ -13,7 +13,7 @@ import time
 import os
 
 __author__ = "Justin R. Klesmith"
-__copyright__ = "Copyright 2015, Justin R. Klesmith"
+__copyright__ = "Copyright 2016, Justin R. Klesmith"
 __credits__ = ["Justin R. Klesmith", "Timothy A. Whitehead"]
 __license__ = "BSD-3"
 __version__ = "1.4X, Build: 201507X"
@@ -77,9 +77,9 @@ def ImportNormData():
             elif line.startswith("Tile Length: "):
                 print "Tile length: "+line.strip()[13:]
                 NumResi = int(line.strip()[13:])
-            elif line.startswith("Start residue:"):
+            elif line.startswith("Start residue (-s): "):
                 split = line.split(" ")
-                StartResidue = int(split[2]) #Set the start residue
+                StartResidue = int(split[3]) #Set the start residue
             elif copy:
                 NormData = NormData + line
                 lines = lines + 1

@@ -364,7 +364,7 @@ def Normalize():
                 
                 Mutations[j][i[1]][1] = "{0:.4f}".format(NE)
             elif Mutations[j][i[1]][2] < SignificantThreshold: #Report the insignificant NEs
-                if WTSeq[j+StartResidue] == i[1]: #Check to see if it's wildtype else it's Not Significant
+                if WTSeq[j] == i[1]: #Check to see if it's wildtype else it's Not Significant
                     Mutations[j][i[1]][0] = Ewt
                     Mutations[j][i[1]][1] = "0.000"
                     Mutations[j][i[1]][2] = UCwt
@@ -400,7 +400,7 @@ def Make_CSV():
     #Print off the WT Residue
     WTResi = " "
     for w in xrange(0,TileLen):
-        WTResi = WTResi+","+WTSeq[StartResidue+w]
+        WTResi = WTResi+","+WTSeq[w]
     print WTResi
     
     #Print off the mutations
@@ -457,7 +457,7 @@ def main():
         print "FACS: Percent Collected (-c): "+args.percentcollected
         print "FACS: Theoretical max enrichment based off of percent collected: "+str(THEOENRICHMENT)
     
-    print "Tile Length: "+TileLen
+    print "Tile Length: "+str(TileLen)
     print "Enrich directory (-p): "+args.path
     print "Unselected counts to be significant (-t): "+str(args.sigthreshold)
     #print "Wild-type sequence file (-w): "+args.wildtype
