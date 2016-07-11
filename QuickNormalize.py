@@ -249,7 +249,7 @@ def Get_Mut_Ei():
                 else:
                     Mutations[location][identity][0] = (Ei + EiScalar)
             
-        elif args.normtype == "growth":
+        else:
             Mutations[location][identity][0] = Ei
 
     return Mutations
@@ -355,7 +355,7 @@ def Normalize():
                     Mutant = special.erfinv(1-PC*pow(2,(Ei+1)))
                     NE = (log(e, 2)*sqrt(2)*SD*(WT-Mutant))
                 elif args.normtype == "Plate1":
-                    NE = (pow(2, Ei))/(pow(2, Ewt))                
+                    NE = (pow(2, Ei))/(pow(2, Ewt))
                 elif args.normtype == "Plate2":
                     NE = (Ei/Ewt)
                 else:

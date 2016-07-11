@@ -90,6 +90,7 @@ def ImportNormData():
 def PopulateMutArrays():
     #Loop through the output
     for line in StringIO.StringIO(NormData):
+        print NormData
         split = line.split(",")
         
         location = int(split[0])

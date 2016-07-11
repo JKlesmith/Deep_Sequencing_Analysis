@@ -38,16 +38,16 @@ if args.path == None:
 if args.stddev == None and args.normtype == "FACS":
     print "Missing SD. Flag: -d"
     quit()
-else:
-    SD = float(args.stddev) #Standard Deviation
 
 if args.percentcollected == None and args.normtype == "FACS":
     print "Missing percent collected. Flag: -c"
     quit()
-else:
-    PC = float(args.percentcollected) #Percent collected
-    THEOENRICHMENT = -log(PC, 2) #Theoretical maximum enrichment 
 
+if args.normtype == "FACS":
+    SD = float(args.stddev) #Standard Deviation
+    PC = float(args.percentcollected) #Percent collected
+    THEOENRICHMENT = -log(PC, 2) #Theoretical maximum enrichment
+    
 if args.ewtenrichment and args.eiscalar != None:
     #This section is only true if we want to provide our own WT enrichment and a scalar to add to Ei
     OverrideEwtEi = True
