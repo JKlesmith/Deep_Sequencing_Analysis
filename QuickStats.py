@@ -27,6 +27,8 @@ __email__ = "klesmit3@msu.edu"
 parser = argparse.ArgumentParser(description='Quick Enrich Stats - Note: you must pre-normalize the data using QuickNormalize.py.')
 parser.add_argument('-f', dest='file', action='store', help='File of your already normalized dataset')
 parser.add_argument('-p', dest='path', action='store', help='What is the path to the enrich tile directory? ie: ./tile/')
+parser.add_argument('-l', dest='tilelength', action='store', help='Tile length override')
+parser.add_argument('-s', dest='tilestart', action='store', help='Tile start override')
 args = parser.parse_args()
 
 #Verify inputs
@@ -41,9 +43,9 @@ if args.path == None:
 #Global vars
 AA_Table = '*ACDEFGHIKLMNPQRSTVWY'
 Mutations = {}
-NumResi = None #Tile length
+NumResi = 0 #Tile length
 NormData = ""
-StartResidue = None
+StartResidue = 0
 
 def Build_Matrix():
     #Populate Mutation Dictionary with None Data
@@ -75,11 +77,17 @@ def ImportNormData():
             elif line.strip() == "Normalized Heatmap":
                 copy = False
             elif line.startswith("Tile Length: "):
-                print "Tile length: "+line.strip()[13:]
-                NumResi = int(line.strip()[13:])
+                if args.tilelength != None:
+                    NumResi = int(args.tilelength)
+                else:
+                    NumResi = int(line.strip()[13:])
+                print "Tile length: "+str(NumResi)
             elif line.startswith("Start residue (-s): "):
                 split = line.split(" ")
-                StartResidue = int(split[3]) #Set the start residue
+                if args.tilestart != None:
+                    StartResidue = int(args.tilestart)
+                else:
+                    StartResidue = int(split[3]) #Set the start residue
             elif copy:
                 NormData = NormData + line
                 lines = lines + 1
@@ -94,6 +102,16 @@ def PopulateMutArrays():
         
         location = int(split[0])
         identity = str(split[1])
+        
+        #Ignore if our location is above our number of residues
+        if location > (NumResi + StartResidue):
+            print "Above Tile Length Reject: "+str(location)+"-"+str(identity)
+            continue
+            
+        #Ignore if our location is below our number of residues
+        if location < StartResidue:
+            print "Below Tile Start Reject "+str(location)+"-"+str(identity)
+            continue
         
         Mutations[location][identity][0] = split[2]
         Mutations[location][identity][1] = split[3]
@@ -328,6 +346,13 @@ def RunStats():
     print time.strftime("%m/%d/%Y")
     print "Nomalized file: "+args.file
     print "Data path: "+args.path
+    print "Tile length: "+str(NumResi)
+    print "Tile start: "+str(StartResidue)
+    if args.tilelength != None:
+        print "Custom tile length passed on the command line"
+        
+    if args.tilestart != None:
+        print "Custom tile start passed on the command line"
 
     reads = DNAReads()
     print "Unselected DNA sequences (reads) from Enrich: "+reads[0]
