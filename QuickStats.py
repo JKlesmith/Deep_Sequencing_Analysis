@@ -104,7 +104,7 @@ def PopulateMutArrays():
         identity = str(split[1])
         
         #Ignore if our location is above our number of residues
-        if location > (NumResi + StartResidue):
+        if location > (NumResi + StartResidue - 1):
             print "Above Tile Length Reject: "+str(location)+"-"+str(identity)
             continue
             

@@ -357,7 +357,7 @@ def Normalize():
                 elif args.normtype == "Plate1":
                     NE = (pow(2, Ei))/(pow(2, Ewt))
                 elif args.normtype == "Plate2":
-                    NE = (Ei/Ewt)
+                    NE = (Ei-Ewt)
                 else:
                     print "Error: growth or FACS not set?"
                     quit()
@@ -366,7 +366,10 @@ def Normalize():
             elif Mutations[j][i[1]][2] < SignificantThreshold: #Report the insignificant NEs
                 if WTSeq[j] == i[1]: #Check to see if it's wildtype else it's Not Significant
                     Mutations[j][i[1]][0] = Ewt
-                    Mutations[j][i[1]][1] = "0.000"
+                    if args.normtype != "Plate1":
+                        Mutations[j][i[1]][1] = "0.000"
+                    else:
+                        Mutations[j][i[1]][1] = "1.000"
                     Mutations[j][i[1]][2] = UCwt
                     Mutations[j][i[1]][3] = SCwt
                     Mutations[j][i[1]][5] = True #Set the WT flag
